@@ -1,0 +1,119 @@
+---
+title: "Assigment - Naive Bayes DIY"
+author:
+  - Lars Jacobs- Author
+  - Daan van Gulick - Reviewer
+  - Ayoub Rabii - Reviewer
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+   html_notebook:
+    toc: true
+    toc_depth: 2
+---
+
+```{r}
+library(tidyverse)
+library(tm)
+library(caret)
+library(wordcloud)
+library(e1071)
+```
+
+## Business Understanding
+Nowadays, many articles can be found online. Not all articles can be considered true. This model will look at whether other fake news articles can be recognised on the basis of words that frequently appear in fake texts.
+
+## Data Understanding
+First, the various articles will be entered and placed in a table.
+```{r}
+url <- "https://raw.githubusercontent.com/HAN-M3DM-Data-Mining/assignments/master/datasets/NB-fakenews.csv"
+rawDF <- read_csv(url)
+```
+```{r}
+head(rawDF)
+```
+
+In order for the system to recognise all fake articles, the label column must be categorised.
+```{r}
+rawDF$type <- rawDF$type %>% factor %>% relevel("1")
+class(rawDF$type)
+```
+
+## Data Preparation
+To make it easier for the system to read, a Corpus function will be added. 
+```{r}
+rawCorpus <- Corpus(VectorSource(rawDF$text))
+inspect(rawCorpus[1])
+```
+
+To avoid differences and to find the necessary words, some things will be left out. For example: capital letters, numbers, stopwords and punctuation. 
+```{r}
+cleanCorpus <- rawCorpus %>% tm_map(tolower) %>% tm_map(removeNumbers)
+cleanCorpus <- cleanCorpus %>% tm_map(removeWords, stopwords()) %>% tm_map(removePunctuation)
+cleanCorpus <- cleanCorpus %>% tm_map(stripWhitespace)
+tibble(Raw = rawCorpus$content[1], Clean = cleanCorpus$content[1])
+```
+
+The next step is to make a table with words that occur in the articles. After this, it can be checked/calculated whether these words occur more often in fake news articles.
+```{r}
+cleanDTM <- cleanCorpus %>% DocumentTermMatrix
+inspect(cleanDTM)
+```
+
+To create a model, 75% of the data file will be trained for the new model. And the remaining 25% will be tested.
+```{r}
+set.seed(1234)
+trainIndex <- createDataPartition(rawDF$label, p = .50, 
+                                  list = FALSE, 
+                                  times = 1)
+head(trainIndex)
+```
+
+Build new datasets
+```{r}
+trainDF <- rawDF[trainIndex, ]
+testDF <- rawDF[-trainIndex, ]
+```
+```{r}
+trainCorpus <- cleanCorpus[trainIndex]
+testCorpus <- cleanCorpus[-trainIndex]
+
+trainDTM <- cleanDTM[trainIndex, ]
+testDTM <- cleanDTM[-trainIndex, ]
+```
+
+In order to check whether the words used in fake news occur frequently, these words will have to appear 1000 times in the text.
+```{r}
+freqWords <- trainDTM %>% findFreqTerms(1)
+trainDTM <-  DocumentTermMatrix(trainCorpus, list(dictionary = freqWords))
+testDTM <-  DocumentTermMatrix(testCorpus, list(dictionary = freqWords))
+```
+
+It does not matter how many times the word appears in the article. When it occurs, it must be classified.
+```{r}
+convert_counts <- function(x) {
+  x <- ifelse(x > 0, 1, 0) %>% factor(levels = c(0,1), labels = c("No", "Yes"))
+}
+
+nColsDTM <- dim(trainDTM)[2]
+trainDTM <- apply(trainDTM, MARGIN = 2, convert_counts)
+testDTM <- apply(testDTM, MARGIN = 2, convert_counts)
+
+head(trainDTM[,1:10])
+```
+
+
+## Modeling
+Now we can build our model.And distinguish the fake articles with a 1.
+```{r}
+nbayesModel <-  naiveBayes(trainDTM, trainDF$label, laplace = 1)
+```
+
+And see what the results are.
+```{r}
+predVec <- predict(nbayesModel, testDTM)
+confusionMatrix(predVec, testDF$label, positive = "1", dnn = c("Prediction", "True"))
+```
+
+
+## Evaluation and Deployment
+The conclusion is that it's not a really good model. Because the accuracy isn't that high.

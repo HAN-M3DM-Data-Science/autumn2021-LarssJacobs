@@ -1,0 +1,90 @@
+---
+title: "Assigment - kNN occupancy "
+author:
+  - Bananas99 - Author
+  - LarssJacobs - Reviewer
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+   html_notebook:
+    toc: true
+    toc_depth: 2
+---
+
+```{r}
+# Loading the libraries
+library(tidyverse)
+library(class)
+library(caret)
+library(e1071)
+```
+
+```{r}
+url <- "https://raw.githubusercontent.com/HAN-M3DM-Data-Mining/assignments/master/datasets/KNN-occupancy.csv"
+rawDF <- read_csv(url)
+
+head(rawDF)
+
+str(rawDF)
+
+cleanDF <- rawDF[-1]
+summary(cleanDF)
+head(cleanDF)
+
+cntDiag <- table(cleanDF$Occupancy)
+propDiag <- round(prop.table(cntDiag) * 100 , digits = 1)
+
+cntDiag
+
+propDiag
+```
+
+```{r}
+cleanDF$Occupancy <- factor(cleanDF$Occupancy, levels = c("0", "1"), labels = c("Not Occupied", "Occupied")) %>% relevel("Occupied")
+head(cleanDF, 10)
+
+summary(cleanDF[c("Temperature", "Light", "CO2", "HumidityRatio")])
+
+normalize <- function(x) { # Function takes in a vector
+  return ((x - min(x)) / (max(x) - min(x))) # distance of item value - minimum vector value divided by the range of all vector values
+}
+
+testSet1 <- c(1:5)
+testSet2 <- c(1:5) * 10
+
+cat("testSet1:", testSet1, "\n")
+
+cat("testSet2:", testSet2, "\n")
+
+cat("Normalized testSet1:", normalize(testSet1), "\n")
+
+cat("Normalized testSet2:", normalize(testSet2))
+
+nCols <- dim(cleanDF)[2]
+cleanDF_n <- sapply(1:(nCols - 1), function(x) {normalize(cleanDF[,x])}) %>% as.data.frame()
+
+summary(cleanDF[c("Temperature", "Light", "CO2", "HumidityRatio")])
+
+```
+
+# Splitting the data in training- and testsets
+```{r}
+s <- sample(c(1:dim(cleanDF)[1]), 6000)
+trainDF_feat <- cleanDF_n[s,  ]
+testDF_feat <- cleanDF_n[-s,  ]
+trainDF_labels <- cleanDF[s, 6 ]
+testDF_labels <- cleanDF[-s,  6]
+```
+
+
+#Now we add a function from the class package
+###The as.matrix behind "cl =" was forgotten.
+```{r}
+cleanDF_test_pred <- knn(train = as.matrix(trainDF_feat), test = as.matrix(testDF_feat), cl = as.matrix(trainDF_labels), k = 21)
+head(cleanDF_test_pred) 
+head(testDF_labels)
+```
+
+#creating a confusionmatrix 
+```{r}
+confusionMatrix(cleanDF_test_pred, testDF_labels[[1]], positive = NULL, dnn = c("Prediction", "True"))
+```
